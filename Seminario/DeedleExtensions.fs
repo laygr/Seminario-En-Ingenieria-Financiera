@@ -13,7 +13,7 @@ module DeedleExtensions =
     type Frame<'TRowKey, 'TColumnKey
             when 'TRowKey : equality
             and 'TColumnKey : equality> with
-        static member denseRank column (groups:int) rankName frame =
+        static member denseRankSlow column (groups:int) rankName frame =
             let frameLength = Frame.countRows frame |> float
             let chunkSize =  frameLength / (float groups) |> Math.Ceiling |> int64
 
@@ -27,6 +27,26 @@ module DeedleExtensions =
                     int ((Frame.indexForKey k sorted) / chunkSize)
                 )
 
+            let clone = frame.Clone()
+            clone.AddColumn(rankName, ranks)
+            clone
+
+        static member denseRank column (groups:int) rankName frame =
+            let frameLength = Frame.countRows frame
+            let chunkSize =  (float frameLength) / (float groups) |> Math.Ceiling
+
+            let sorted =
+                frame
+                |> Frame.sortRows column
+
+            let sortedKeys = Frame.getRowKeys sorted
+
+            let ranksArr = Array.zeroCreate frameLength
+
+            sortedKeys
+            |> Seq.iteri (fun index _ -> ranksArr.[index] <- index / (int chunkSize))
+
+            let ranks = Series(sortedKeys, ranksArr)
             let clone = frame.Clone()
             clone.AddColumn(rankName, ranks)
             clone
@@ -75,7 +95,7 @@ module DeedleExtensions =
             |> Frame.take (int (Frame.indexForKey key data))
             |> Frame.takeLast rows
 
-        static member getRowKeys (frame:Frame<_,_>) =
+        static member getRowKeys (frame:Frame<_,_>) : seq<'a> =
             frame.RowKeys
 
     type Series<'K, 'V when 'K : equality> with
